@@ -1,0 +1,229 @@
+C51 COMPILER V8.05a   ADC1___副盻                                                          11/23/2017 23:03:14 PAGE 1   
+
+
+C51 COMPILER V8.05a, COMPILATION OF MODULE ADC1___副盻
+OBJECT MODULE PLACED IN ADC1 - 副本.OBJ
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE ADC1 - 副本.c BROWSE DEBUG OBJECTEXTEND
+
+line level    source
+
+   1          #include <c8051f120.h>
+   2          #include <stdio.h>
+   3          /*----------------------注：SYSCLK最好选3.0625MHz,不要选定时器1作为串口时钟源----------*/
+   4          /***************************************/
+   5          #define Reset_Sources_Init() do{WDTCN = 0xde;WDTCN = 0xad;}while(0)
+   6          
+   7          #define Interrupts_Init  (IE = 0x90)
+   8          
+   9          #define ADC_INT (EIE2 = 0x2)
+  10          
+  11          #define cli (IE &= ~0x10)
+  12          
+  13          #define sti (IE |= 0x10)
+  14          
+  15          #define POINT 21
+  16          
+  17          typedef struct param
+  18          {
+  19            unsigned int mass;
+  20            unsigned int volt;
+  21          }PRAM,*LPRAM;
+  22          /*******子函数声明***************/
+  23          void Timer_Init(void);
+  24          
+  25          void UART_Init(void); 
+  26          
+  27          void ADC_Init(void);
+  28          
+  29          void Port_IO_Init(void);
+  30          
+  31          void Flash_Config(void);
+  32          
+  33          unsigned int seek(LPRAM lptr,unsigned int lseek);
+  34          
+  35          //float slope(LPRAM point1,LPRAM point2);
+  36          /*****************************/
+  37          
+  38          /***********全局变量*********/
+  39          unsigned long Result;//有符号数导致数据出错
+  40          
+  41          bit flag = 0;
+  42          
+  43          bit calibration = 1;
+  44          /****************************/
+  45          /**********寄存器定义********/
+  46          sfr16 ADC0 = 0xbe;
+  47          /****************************/
+  48          int main(void)
+  49          {
+  50   1         PRAM zero;
+  51   1         PRAM xdata table[POINT]={{0,1310},{10,1315},{20,1320},{30,1324},{40,1330},{50,1335},{60,1340},{70,1345}
+             -,{80,1350},{90,1355},{100,1360},{110,1366},{120,1371},{130,1376},{140,1381},{150,1386},{160,1391},{170,1396},{180,1401},
+             -{190,1407},{200,1412}};
+  52   1         char str[8],i;
+  53   1         unsigned int delta,result,tmp;
+C51 COMPILER V8.05a   ADC1___副盻                                                          11/23/2017 23:03:14 PAGE 2   
+
+  54   1         Reset_Sources_Init();
+  55   1         Timer_Init();
+  56   1         ADC_Init();
+  57   1         Port_IO_Init();
+  58   1         UART_Init();
+  59   1         ADC_INT;
+  60   1         Interrupts_Init;
+  61   1      
+  62   1         while (1)
+  63   1        {     
+  64   2          if (flag)
+  65   2        {     
+  66   3           if (calibration)
+  67   3              {
+  68   4           zero.volt = (unsigned int)Result;
+  69   4               calibration = 0;
+  70   4               if (zero.volt > table[0].volt)
+  71   4              {
+  72   5                      delta = zero.volt - table[0].volt;
+  73   5                              for (i = 0x0;i < sizeof(table);i++)      //更新表
+  74   5                                      table[i].volt += delta;
+  75   5          }
+  76   4                              else if (zero.volt < table[0].volt)
+  77   4                      {
+  78   5                                      delta = table[0].volt - zero.volt;
+  79   5                                              for (i = 0x0;i < sizeof(table);i++)
+  80   5                                              table[i].volt -= delta;
+  81   5                      }
+  82   4              }
+  83   3              tmp = (unsigned int)Result;
+  84   3              result = seek(table,tmp); 
+  85   3           sprintf(str,"%d",result);
+  86   3           cli; 
+  87   3           TI0 = 1;
+  88   3           printf("t6.txt=\"%s\"",str);
+  89   3           printf("%c%c%c",0xff,0xff,0xff);
+  90   3               TI0 = 0;
+  91   3               sti;
+  92   3        }
+  93   2        }
+  94   1      }
+  95          
+  96          void Timer_Init(void)
+  97          {
+  98   1          SFRPAGE   = TMR2_PAGE;
+  99   1          TMR2CN    = 0x04;
+ 100   1          TMR2CF    = 0x08;
+ 101   1          RCAP2L    = 0xEC;
+ 102   1          RCAP2H    = 0xFF;
+ 103   1              SFRPAGE   = TMR3_PAGE;
+ 104   1          TMR3CN    = 0x04;
+ 105   1          TMR3CF    = 0x08;
+ 106   1              TMR3L     = 0xfe;
+ 107   1              TMR3H     = 0xff;
+ 108   1              RCAP3L    = 0xfe;
+ 109   1              RCAP3H    = 0xff;
+ 110   1      }
+ 111          
+ 112          void UART_Init(void)
+ 113          {
+ 114   1        SFRPAGE   = UART0_PAGE;
+ 115   1        SCON0     = 0x50;
+C51 COMPILER V8.05a   ADC1___副盻                                                          11/23/2017 23:03:14 PAGE 3   
+
+ 116   1        SSTA0     = 0x05;
+ 117   1      }
+ 118          
+ 119          void Port_IO_Init(void)
+ 120          {
+ 121   1          SFRPAGE   = CONFIG_PAGE;
+ 122   1          P0MDOUT   = 0xf1;
+ 123   1              P1MDOUT   = 0x01;
+ 124   1          XBR0      = 0x04;
+ 125   1          XBR2      = 0x40;
+ 126   1      }
+ 127          
+ 128          void ADC_Init(void)
+ 129          {
+ 130   1         SFRPAGE   = ADC0_PAGE;
+ 131   1         ADC0CN    = 0x84;
+ 132   1         ADC0CF    = 0x28;
+ 133   1         REF0CN    = 0x02; //参考电压设置
+ 134   1      }
+ 135          
+ 136          void recieve(void) interrupt 4 using 1
+ 137          {
+ 138   1        char dat;
+ 139   1        SFRPAGE   = UART0_PAGE;
+ 140   1         if (RI0)
+ 141   1       {
+ 142   2              dat = SBUF0;
+ 143   2        if (dat == 0x55)
+ 144   2           flag = 1;
+ 145   2          
+ 146   2        if (dat == 0xaa)
+ 147   2              flag = 0;
+ 148   2      
+ 149   2              RI0 = 0;
+ 150   2       }      
+ 151   1      }
+ 152          
+ 153          void ADC0_ISR (void) interrupt 15 using 2
+ 154          {
+ 155   1         static unsigned int int_dec = 8192;    // Integrate/decimate counter
+ 156   1                                             // we post a new result when
+ 157   1                                             // int_dec = 0
+ 158   1         static unsigned long accumulator=0;         // Here's where we integrate the
+ 159   1         
+ 160   1         SFRPAGE   = ADC0_PAGE;                                    // ADC samples
+ 161   1         EIE2 &= ~0x2;
+ 162   1         AD0INT = 0;                         // Clear ADC conversion complete
+ 163   1                                             // indicator
+ 164   1      
+ 165   1         accumulator += ADC0;                // Read ADC value and add to running
+ 166   1                                             // total
+ 167   1         int_dec--;                          // Update decimation counter
+ 168   1      
+ 169   1         if (int_dec == 0)                   // If zero, then post result
+ 170   1         {
+ 171   2            int_dec = 8192;               // Reset counter
+ 172   2            Result = accumulator >> 13;
+ 173   2            accumulator = 0L;                // Reset accumulator
+ 174   2         }
+ 175   1         EIE2 |= 0x2;
+ 176   1      }
+ 177          
+C51 COMPILER V8.05a   ADC1___副盻                                                          11/23/2017 23:03:14 PAGE 4   
+
+ 178          unsigned int seek(LPRAM lptr,unsigned int lseek)
+ 179          {
+ 180   1        char cnt;
+ 181   1        //unsigned int ret;
+ 182   1        for (cnt = 0x0;cnt < POINT;cnt++)
+ 183   1       {
+ 184   2         if (lptr[cnt].volt - lseek < 0x3 || lseek - lptr[cnt].volt < 0x3)
+ 185   2                return lptr[cnt].mass;
+ 186   2       }
+ 187   1      }
+ 188          
+ 189          //float slope(LPRAM point1,LPRAM point2)
+ 190          //{
+ 191          //  float mass1,mass2,volt1,volt2,tslope;
+ 192          //  mass1 = (float)point1->mass;
+ 193          //  volt1 = (float)point1->volt;
+ 194          //  mass2 = (float)point2->mass;
+ 195          //  volt2 = (float)point2->volt;
+ 196          //  tslope = (volt2 - volt1) / (mass2 - mass1);
+ 197          //  return tslope;
+ 198          //}
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    657    ----
+   CONSTANT SIZE    =    106    ----
+   XDATA SIZE       =   ----      84
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     10      24
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      2    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

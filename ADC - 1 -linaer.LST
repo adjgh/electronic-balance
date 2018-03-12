@@ -1,0 +1,202 @@
+C51 COMPILER V8.05a   ADC___1__LINAER                                                      11/22/2017 21:13:48 PAGE 1   
+
+
+C51 COMPILER V8.05a, COMPILATION OF MODULE ADC___1__LINAER
+OBJECT MODULE PLACED IN ADC - 1 -linaer.OBJ
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE ADC - 1 -linaer.c BROWSE DEBUG OBJECTEXTEND
+
+line level    source
+
+   1          #include <c8051f120.h>
+   2          #include <stdio.h>
+   3          /*----------------------注：SYSCLK最好选3.0625MHz,不要选定时器1作为串口时钟源----------*/
+   4          /***************************************/
+   5          #define Reset_Sources_Init() do{WDTCN = 0xde;WDTCN = 0xad;}while(0)
+   6          
+   7          #define Interrupts_Init  (IE = 0x90)
+   8          
+   9          #define ADC_INT (EIE2 = 0x2)
+  10          
+  11          #define cli (IE &= ~0x10)
+  12          
+  13          #define sti (IE |= 0x10)
+  14          
+  15          #define POINT 21
+  16          
+  17          typedef struct param
+  18          {
+  19            unsigned int mass;
+  20            unsigned int volt;
+  21          }PRAM,*LPRAM;
+  22          /*******子函数声明***************/
+  23          void Timer_Init(void);
+  24          
+  25          void UART_Init(void); 
+  26          
+  27          void ADC_Init(void);
+  28          
+  29          void Port_IO_Init(void);
+  30          
+  31          void Flash_Config(void);
+  32          
+  33          //float slope(LPRAM point1,LPRAM point2);
+  34          /*****************************/
+  35          
+  36          /***********全局变量*********/
+  37          unsigned long Result;//有符号数导致数据出错
+  38          
+  39          bit flag = 0;
+  40          
+  41          bit post = 0;
+  42          
+  43          bit calibration = 0;
+  44          /****************************/
+  45          /**********寄存器定义********/
+  46          sfr16 ADC0 = 0xbe;
+  47          /****************************/
+  48          int main(void)
+  49          {
+  50   1         PRAM zero;
+  51   1         PRAM xdata table[POINT]={{0,1310},{10,1315},{20,1320},{30,1324},{40,1330},{50,1335},{60,1340},{70,1345}
+             -,{80,1350},{90,1355},{100,1360},{110,1366},{120,1371},{130,1376},{140,1381},{150,1386},{160,1391},{170,1396},{180,1401},
+             -{190,1407},{200,1412}};
+  52   1         char str[8];
+  53   1         unsigned int result;
+C51 COMPILER V8.05a   ADC___1__LINAER                                                      11/22/2017 21:13:48 PAGE 2   
+
+  54   1         Reset_Sources_Init();
+  55   1         Timer_Init();
+  56   1         ADC_Init();
+  57   1         Port_IO_Init();
+  58   1         UART_Init();
+  59   1         ADC_INT;
+  60   1         Interrupts_Init;
+  61   1      
+  62   1         while (1)
+  63   1        {     
+  64   2          if (flag)
+  65   2        {
+  66   3           result = (unsigned int)Result;     
+  67   3           sprintf(str,"%ld",Result);
+  68   3           cli; 
+  69   3           TI0 = 0;
+  70   3           printf("t6.txt=\"%s\"",str);
+  71   3           printf("%c%c%c",0xff,0xff,0xff);
+  72   3               TI0 = 1;
+  73   3               sti;
+  74   3        }
+  75   2        }
+  76   1      }
+*** WARNING C280 IN LINE 50 OF ADC - 1 -LINAER.C: 'zero': unreferenced local variable
+  77          
+  78          void Timer_Init(void)
+  79          {
+  80   1          SFRPAGE   = TMR2_PAGE;
+  81   1          TMR2CN    = 0x04;
+  82   1          TMR2CF    = 0x08;
+  83   1          RCAP2L    = 0xEC;
+  84   1          RCAP2H    = 0xFF;
+  85   1              SFRPAGE   = TMR3_PAGE;
+  86   1          TMR3CN    = 0x04;
+  87   1          TMR3CF    = 0x08;
+  88   1              TMR3L     = 0xfe;
+  89   1              TMR3H     = 0xff;
+  90   1              RCAP3L    = 0xfe;
+  91   1              RCAP3H    = 0xff;
+  92   1      }
+  93          
+  94          void UART_Init(void)
+  95          {
+  96   1        SFRPAGE   = UART0_PAGE;
+  97   1        SCON0     = 0x50;
+  98   1        SSTA0     = 0x05;
+  99   1      }
+ 100          
+ 101          void Port_IO_Init(void)
+ 102          {
+ 103   1          SFRPAGE   = CONFIG_PAGE;
+ 104   1          P0MDOUT   = 0xf1;
+ 105   1              P1MDOUT   = 0x01;
+ 106   1          XBR0      = 0x04;
+ 107   1          XBR2      = 0x40;
+ 108   1      }
+ 109          
+ 110          void ADC_Init(void)
+ 111          {
+ 112   1         SFRPAGE   = ADC0_PAGE;
+ 113   1         ADC0CN    = 0x84;
+ 114   1         ADC0CF    = 0x28;
+C51 COMPILER V8.05a   ADC___1__LINAER                                                      11/22/2017 21:13:48 PAGE 3   
+
+ 115   1         REF0CN    = 0x02; //参考电压设置
+ 116   1      }
+ 117          
+ 118          void recieve(void) interrupt 4 using 1
+ 119          {
+ 120   1        char dat;
+ 121   1        SFRPAGE   = UART0_PAGE;
+ 122   1         if (RI0)
+ 123   1       {
+ 124   2              dat = SBUF0;
+ 125   2        if (dat == 0x55)
+ 126   2           flag = 1;
+ 127   2          
+ 128   2        if (dat == 0xaa)
+ 129   2              flag = 0;
+ 130   2      
+ 131   2              RI0 = 0;
+ 132   2       }      
+ 133   1      }
+ 134          
+ 135          void ADC0_ISR (void) interrupt 15 using 2
+ 136          {
+ 137   1         static unsigned int int_dec = 8192;    // Integrate/decimate counter
+ 138   1                                             // we post a new result when
+ 139   1                                             // int_dec = 0
+ 140   1         static unsigned long accumulator=0;         // Here's where we integrate the
+ 141   1         
+ 142   1         SFRPAGE   = ADC0_PAGE;                                    // ADC samples
+ 143   1         EIE2 &= ~0x2;
+ 144   1         AD0INT = 0;                         // Clear ADC conversion complete
+ 145   1                                             // indicator
+ 146   1      
+ 147   1         accumulator += ADC0;                // Read ADC value and add to running
+ 148   1                                             // total
+ 149   1         int_dec--;                          // Update decimation counter
+ 150   1      
+ 151   1         if (int_dec == 0)                   // If zero, then post result
+ 152   1         {
+ 153   2            int_dec = 8192;               // Reset counter
+ 154   2            Result = accumulator >> 13;
+ 155   2            accumulator = 0L;                // Reset accumulator
+ 156   2                post = 1;
+ 157   2         }
+ 158   1         EIE2 |= 0x2;
+ 159   1      }
+ 160          
+ 161          //float slope(LPRAM point1,LPRAM point2)
+ 162          //{
+ 163          //  float mass1,mass2,volt1,volt2,tslope;
+ 164          //  mass1 = (float)point1->mass;
+ 165          //  volt1 = (float)point1->volt;
+ 166          //  mass2 = (float)point2->mass;
+ 167          //  volt2 = (float)point2->volt;
+ 168          //  tslope = (volt2 - volt1) / (mass2 - mass1);
+ 169          //  return tslope;
+ 170          //}
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    350    ----
+   CONSTANT SIZE    =    107    ----
+   XDATA SIZE       =   ----      84
+C51 COMPILER V8.05a   ADC___1__LINAER                                                      11/22/2017 21:13:48 PAGE 4   
+
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     10      14
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      3    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  1 WARNING(S),  0 ERROR(S)
