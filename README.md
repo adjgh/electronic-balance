@@ -1,2 +1,2 @@
-# hello-world
-Just another repository
+# 无线遥控小车
+这是一个自己在学校做的遥控小车，目的在于宣传我们社团，该车使用了NRF24C01模块，包含了操作硬件的库函数。
